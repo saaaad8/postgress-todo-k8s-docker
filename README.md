@@ -1,105 +1,198 @@
-# Node.js PostgreSQL Todo Application
+# 📝 Node.js PostgreSQL Todo Application
 
-A simple Node.js application demonstrating database migrations with PostgreSQL using `node-pg-migrate`.
+A simple Node.js application with PostgreSQL integration and database migrations using `node-pg-migrate`. This project supports both Docker-based local development and Kubernetes-based production deployment.
 
-## Features
+---
 
-- PostgreSQL database integration
-- Database migrations using `node-pg-migrate`
-- Environment-based configuration
-- Simple todo management system
+## 🚀 Features
 
-## Prerequisites
+* Node.js + PostgreSQL Todo API
+* Schema migrations via `node-pg-migrate`
+* Dockerized services for local development
+* Kubernetes manifests for orchestration
+* One-command deployment and migration support
+* Persistent volume support for PostgreSQL
 
-- Node.js (v14 or higher)
-- PostgreSQL database server
-- npm (Node Package Manager)
+---
 
-## Project Structure
+## 📁 Project Structure
 
 ```
-├── migrations/
-│   └── 1698765432345_create-todos-table.js
-├── .env.example
-├── .env
-├── index.js
+.
+├── docker-compose.yml        # Docker services (Node.js, PostgreSQL)
+├── Dockerfile                # Node.js app container definition
+├── index.js                  # App entry point
+├── migrations/               # DB migration files
+├── views/                    # EJS templates
+├── k8s/                      # Kubernetes manifests
+│   ├── node-app-pod.yml
+│   ├── node-app-pvc.yml
+│   ├── node-app-svc.yml
+│   ├── pg-app-pod.yml
+│   ├── pg-app-pvc.yml
+│   ├── pg-app-svc.yml
+├── deploy.sh                 # Script to deploy app to Kubernetes and run migrations
 ├── package.json
+├── .env.example
 └── README.md
 ```
 
-## Setup
+---
 
-1. Clone the repository
-2. Install dependencies:
+## 🧪 Local Development (Docker)
+
+### Prerequisites
+
+* [Docker](https://www.docker.com/)
+* [Docker Compose](https://docs.docker.com/compose/)
+
+### Steps
+
+1. Build and run the services:
+
    ```bash
-   npm install
+   docker-compose up --build
    ```
-3. Create a `.env` file based on `.env.example`:
+
+2. Run migrations inside the Node.js container:
+
    ```bash
-   cp .env.example .env
-   ```
-4. Update the `.env` file with your PostgreSQL connection details:
-   ```
-   DATABASE_URL=postgres://username:password@localhost:5432/database_name
+   docker exec -it node-app npm run migrate:up
    ```
 
-## Database Migrations
+3. Visit the app:
 
-This project uses `node-pg-migrate` for managing database schema changes.
+   ```
+   http://localhost:3000
+   ```
 
-### Available Migration Commands
+---
 
-- Run all pending migrations:
-  ```bash
-  npm run migrate:up
-  ```
-- Revert the last migration:
-  ```bash
-  npm run migrate:down
-  ```
+## ☸️ Kubernetes Deployment
 
-### Current Migrations
+### Prerequisites
 
-1. `1698765432345_create-todos-table.js`
-   - Creates the initial `todos` table with:
-     - `id` (Primary Key)
-     - `title` (varchar)
-     - `completed` (boolean)
-     - `created_at` (timestamp)
+* Kubernetes cluster (minikube, Docker Desktop, or cloud)
+* `kubectl` configured
+* Docker image `node-app:latest` built and pushed to a registry accessible by your cluster
 
-## Running the Application
+### 🚀 One-Command Deployment
 
-Start the application:
+Use the `deploy.sh` script:
+
 ```bash
-npm start
+./deploy.sh [namespace]
 ```
 
-The application will:
-1. Connect to the PostgreSQL database
-2. Display the current timestamp
-3. List all todos in the database
+* Defaults to `todo` namespace if none is provided.
+* Performs the following:
 
-## Environment Variables
+  * Creates namespace
+  * Deploys PVCs, Services, and Pods
+  * Waits for readiness
+  * Runs DB migrations inside the Node.js pod
 
-| Variable      | Description                | Example                                           |
-|--------------|----------------------------|---------------------------------------------------|
-| DATABASE_URL | PostgreSQL connection URL  | postgres://username:password@localhost:5432/todos |
+### Manual Kubernetes Steps
 
-## Security Notes
+```bash
+export NS=todo
 
-- Never commit the `.env` file to version control
-- Keep your database credentials secure
-- The `.env.example` file should not contain actual credentials
+kubectl create ns $NS
 
-## Scripts
+kubectl apply -f k8s/pg-app-pvc.yml -n $NS
+kubectl apply -f k8s/node-app-pvc.yml -n $NS
 
-- `npm start` - Run the application
-- `npm run migrate` - Run database migrations
-- `npm run migrate:up` - Apply pending migrations
-- `npm run migrate:down` - Revert the last migration
+kubectl apply -f k8s/pg-app-svc.yml -n $NS
+kubectl apply -f k8s/node-app-svc.yml -n $NS
 
-## Dependencies
+kubectl apply -f k8s/pg-app-pod.yml -n $NS
+kubectl wait --for=condition=Ready pod/postgres -n $NS --timeout=90s
 
-- `pg` - PostgreSQL client for Node.js
-- `node-pg-migrate` - Database migration tool
-- `dotenv` - Environment variable management
+kubectl apply -f k8s/node-app-pod.yml -n $NS
+kubectl wait --for=condition=Ready pod/node-app -n $NS --timeout=90s
+
+kubectl exec -n $NS node-app -- npm run migrate:up
+```
+
+### Kubernetes Highlights
+
+* Uses `initContainer` to wait for PostgreSQL readiness.
+* Database connection via:
+
+  ```yaml
+  - name: DATABASE_URL
+    value: postgresql://postgres:postgres@postgres.todo.svc.cluster.local:5432/postgres
+  ```
+
+---
+
+## 🔄 Database Migrations
+
+Using [`node-pg-migrate`](https://github.com/salsita/node-pg-migrate).
+
+### Commands
+
+```bash
+npm run migrate:up       # Run all migrations
+npm run migrate:down     # Revert last migration
+npm run migrate -- --name create_some_table
+```
+
+### Example Migration
+
+`1698765432345_create-todos-table.js` creates the `todos` table:
+
+* `id`: Primary key
+* `title`: Text
+* `completed`: Boolean
+* `created_at`: Timestamp
+
+---
+
+## 🌱 Environment Variables
+
+`.env.example` includes:
+
+| Variable       | Description                  | Example                                                |
+| -------------- | ---------------------------- | ------------------------------------------------------ |
+| `DATABASE_URL` | PostgreSQL connection string | `postgres://postgres:postgres@localhost:5432/postgres` |
+
+---
+
+## 📜 Scripts
+
+| Script                 | Description                   |
+| ---------------------- | ----------------------------- |
+| `npm start`            | Start the Node.js application |
+| `npm run migrate`      | Run `node-pg-migrate`         |
+| `npm run migrate:up`   | Apply all migrations          |
+| `npm run migrate:down` | Revert the last migration     |
+
+---
+
+## 🔐 Security Tips
+
+* Don’t commit `.env` files with real credentials
+* Use Kubernetes Secrets for sensitive data in production
+* Limit access to PostgreSQL service inside the cluster
+
+---
+
+## 📦 Dependencies
+
+* Node.js (v14+)
+* PostgreSQL
+* Docker & Docker Compose
+* Kubernetes & kubectl
+* `pg`, `node-pg-migrate`, `dotenv`
+
+---
+
+## 🙌🏼 Credits
+
+* Original application logic and migrations are adapted from
+  👉 [iam-veeramalla/cicd-for-databases](https://github.com/iam-veeramalla/cicd-for-databases)
+
+* Dockerization and Kubernetes configuration by **me**
+
+---
